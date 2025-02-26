@@ -1,18 +1,32 @@
 from dotenv import load_dotenv
 import os
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from database import SessionLocal
+from models import Task  # Import Task directly
 
 # Load environment variables from .env file
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*")
-from fastapi import FastAPI, Depends
-from sqlalchemy.orm import Session
-from database import SessionLocal
-from models import Task  # Import Task directly
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY is not set in the environment variables.")
+
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
 # Initialize FastAPI app
 app = FastAPI()
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,  # Read from environment variable
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Dependency to get a database session
 def get_db():
@@ -21,6 +35,10 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Pydantic model for task creation
+class TaskCreate(BaseModel):
+    title: str
 
 # API Endpoints
 
@@ -31,8 +49,8 @@ def read_tasks(db: Session = Depends(get_db)):
 
 # Create a new task
 @app.post("/tasks/")
-def create_task(title: str, db: Session = Depends(get_db)):
-    new_task = Task(title=title)
+def create_task(task_data: TaskCreate, db: Session = Depends(get_db)):
+    new_task = Task(title=task_data.title)
     db.add(new_task)
     db.commit()
     db.refresh(new_task)
@@ -42,8 +60,9 @@ def create_task(title: str, db: Session = Depends(get_db)):
 @app.delete("/tasks/{task_id}")
 def delete_task(task_id: int, db: Session = Depends(get_db)):
     task = db.query(Task).filter(Task.id == task_id).first()
-    if task:
-        db.delete(task)
-        db.commit()
-        return {"message": "Task deleted"}
-    return {"error": "Task not found"}
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    db.delete(task)
+    db.commit()
+    return {"message": "Task deleted"}
+
