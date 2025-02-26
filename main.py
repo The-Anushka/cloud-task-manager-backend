@@ -1,3 +1,11 @@
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*")
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from database import SessionLocal
